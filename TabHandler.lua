@@ -53,9 +53,9 @@ KioskMenu.Tabs = {
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
-local player = game.Players.LocalPlayer
+local Player = game.Players.LocalPlayer
 
-local PlayerGui = player:FindFirstChild("PlayerGui")
+local PlayerGui = Player:FindFirstChild("PlayerGui")
 if not PlayerGui then
 	warn("PlayerGui not found!")
 	return
@@ -70,7 +70,7 @@ end
 local Currency = "£"
 local ImageColour = Color3.fromRGB(0, 0, 0)
 
-local MaxContentsPerPage = 4 -- DO NOT CHANGE
+local MaxContentsPerPage = 4
 
 local KioskMenuMainFrame = KioskGUI:WaitForChild("Kiosk")
 local KioskMenuPositioner = KioskMenuMainFrame:WaitForChild("Kiosk-Top")
@@ -88,27 +88,21 @@ KioskMenu.CurrentlySelectedHeader = nil
 
 local OriginalTabs = KioskMenu.Tabs
 
-function KioskMenu:AnimateFrame(frame, properties, duration)
-	local tween = TweenService:Create(frame, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), properties)
-	tween:Play()
-end
-
-function KioskMenu:ScrollToTop()
-	local UP = TweenInfo.new(
-		0.5, 
-		Enum.EasingStyle.Quad, 
-		Enum.EasingDirection.Out, 
-		0, 
-		false, 
-		0 
-	)
-
-	local TweenGoal = {CanvasPosition = Vector2.new(0, 0)}
-	local Tween = TweenService:Create(KioskScrollMenu, UP, TweenGoal)
-
+-- Function to animate a UI frame to a given set of properties.
+function KioskMenu:AnimateFrame(Frame, Properties, Duration)
+	local Tween = TweenService:Create(Frame, TweenInfo.new(Duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), Properties)
 	Tween:Play()
 end
 
+-- Scrolls the Kiosk menu to the top with a smooth animation.
+function KioskMenu:ScrollToTop()
+	local Up = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	local TweenGoal = {CanvasPosition = Vector2.new(0, 0)}
+	local Tween = TweenService:Create(KioskScrollMenu, Up, TweenGoal)
+	Tween:Play()
+end
+
+-- Function to filter items based on a search query.
 function KioskMenu:SearchMenu(Query)
 	local FilteredItems = {}
 	for TabName, Items in pairs(self.Tabs) do
@@ -122,19 +116,23 @@ function KioskMenu:SearchMenu(Query)
 	return FilteredItems
 end
 
+-- Updates the displayed menu based on the search query.
 function KioskMenu:UpdateMenuBasedOnSearch(Query)
 	local FilteredItems = self:SearchMenu(Query)
 
+	-- Remove current items from the display.
 	for _, Child in ipairs(KioskScrollMenu:GetChildren()) do
 		if Child:IsA("Frame") then
 			Child:Destroy()
 		end
 	end
 
+	-- Update tabs with the filtered items and reload the menu.
 	self.Tabs = FilteredItems
 	self:LoadMenuContents()
 end
 
+-- Checks for text change in the search bar and updates the menu.
 KioskSearchBar.SearchBar:GetPropertyChangedSignal("Text"):Connect(function()
 	local SearchQuery = KioskSearchBar.SearchBar.Text
 	if SearchQuery == "" then
@@ -145,200 +143,246 @@ KioskSearchBar.SearchBar:GetPropertyChangedSignal("Text"):Connect(function()
 	end
 end)
 
-
+-- Main function to load the menu contents based on the current search and tab.
 function KioskMenu:LoadMenuContents()
+	-- Define the tab order for the menu.
 	local TabOrder = {"   🥞 Breakfast", "   🍹 Drinks", "   🍟 Snacks", "   🍰 Desserts", "   💥 Combos", "   🍲 Soups", "   🔮 Specials"}
 
+	-- Guard clause for missing UI elements.
 	if not MenuSubSection or not MenuContent or not KioskScrollMenu then
 		warn("UI elements not properly defined!")
 		return
 	end
 
-	-- Clear previous contents
+	-- Clear previous menu items.
+	self:ClearMenuItems()
+
+	-- Load the selected tab's items at the top.
+	self:LoadSelectedTab()
+
+	-- Create headers for each tab and add click functionality.
+	self:CreateTabHeaders(TabOrder)
+
+	-- Load contents for each tab, allowing pagination.
+	self:LoadTabContents(TabOrder)
+end
+
+-- Clears all items from the current menu.
+function KioskMenu:ClearMenuItems()
 	for _, child in ipairs(KioskScrollMenu:GetChildren()) do
 		if child:IsA("Frame") then
 			child:Destroy()
 		end
 	end
+end
 
-	-- Load the selected header's content at the top
+-- Loads the content of the currently selected tab.
+function KioskMenu:LoadSelectedTab()
 	if KioskMenu.CurrentlySelectedHeader then
 		local SelectedTab = KioskMenu.CurrentlySelectedHeader
 		local Items = self.Tabs[SelectedTab]
 		if Items and #Items > 0 then
 			local SubSection = MenuSubSection:Clone()
 			SubSection.Name = SelectedTab
-			SubSection:WaitForChild("TitleName").Text = SelectedTab:sub(1):match("^%s*(.-)%s*$")
+			SubSection:WaitForChild("TitleName").Text = SelectedTab:match("^%s*(.-)%s*$")
 			SubSection.Parent = KioskScrollMenu
 		end
 	end
+end
 
-	-- Create headers and connect click events
+-- Creates headers for the tabs in the menu.
+function KioskMenu:CreateTabHeaders(TabOrder)
 	for _, TabName in ipairs(TabOrder) do
 		local Header = KioskScrollHeaders:FindFirstChild(TabName)
 		if not Header then
-			local Gradient = KioskHeader.Parent:FindFirstChild("UIGradient")
-			Header = KioskHeader:Clone()
-			Header.Name = TabName
-			Header.Text = TabName
-			Header.Parent = KioskScrollHeaders
-
-			Header:WaitForChild("Buttom").MouseButton1Click:Connect(function()
-				if KioskMenu.CurrentlySelectedHeader == TabName then
-					return
-				end
-
-				if KioskMenu.CurrentlySelectedHeader then
-					KioskMenu:LoadMenuContents()
-				end
-
-				KioskMenu.CurrentlySelectedHeader = TabName
-
-				KioskMenu.CurrentPages[TabName] = 1 
-				KioskMenu:LoadMenuContents() 
-
-				for _, i in KioskScrollHeaders:GetDescendants() do
-					if i:IsA("UIGradient") then
-						local FadeTween = TweenService:Create(i.Parent, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1})
-
-						FadeTween:Play()
-
-						i:Destroy()
-					end
-				end
-
-				local Gradientc = Gradient:Clone()
-				Gradientc.Parent = Header
-
-				local TweenTras = TweenInfo.new(
-					0.5, 
-					Enum.EasingStyle.Quad, 
-					Enum.EasingDirection.Out,
-					0, 
-					false, 
-					0
-				)
-
-				local TransparencyTween = TweenService:Create(Header, TweenTras, {BackgroundTransparency = 0.91})
-
-
-				TransparencyTween:Play()
-
-				KioskMenu:ScrollToTop()
-			end)
-		end
-	end
-
-	-- Allow user to change page
-	for _, TabName in ipairs(TabOrder) do
-		local Items = self.Tabs[TabName]
-		if Items and #Items > 0 then
-			if not self.CurrentPages[TabName] then
-				self.CurrentPages[TabName] = 1 
-			end
-
-			local Page = self.CurrentPages[TabName]
-			local StartIndex = (Page - 1) * MaxContentsPerPage + 1
-			local EndIndex = math.min(StartIndex + MaxContentsPerPage - 1, #Items)
-
-			local SubSection = KioskScrollMenu:FindFirstChild(TabName)
-			if not SubSection then
-				SubSection = MenuSubSection:Clone()
-				SubSection.Name = TabName
-				SubSection:WaitForChild("TitleName").Text = TabName:sub(1):match("^%s*(.-)%s*$")
-				SubSection.Parent = KioskScrollMenu
-			end
-
-			local ContentsFrame = SubSection:WaitForChild("SubSectionContents")
-			for _, child in ipairs(ContentsFrame:GetChildren()) do
-				if not child:IsA("UIListLayout") then
-					child:Destroy()
-				end
-			end
-
-			local BackButton = SubSection:WaitForChild("Back")
-			local ForwardButton = SubSection:WaitForChild("Forward")
-
-			ForwardButton.MouseButton1Click:Connect(function()				
-				if Debounce then return end 
-				Debounce = true
-
-				local CurrentTab = SubSection.Name
-				print(CurrentTab,  KioskMenu.CurrentPages[CurrentTab])
-				local CurrentPage = KioskMenu.CurrentPages[CurrentTab] or 1
-				local TotalPages = math.ceil(#KioskMenu.Tabs[CurrentTab] / MaxContentsPerPage)
-
-				if CurrentPage < TotalPages then
-					KioskMenu.CurrentPages[CurrentTab] = CurrentPage + 1
-					print(CurrentPage+1)
-					KioskMenu:LoadMenuContents()
-				else
-					print("You are already on the last page!")
-				end
-
-				wait(0.3) 
-				Debounce = false
-			end)
-
-			BackButton.MouseButton1Click:Connect(function()
-				if Debounce then return end 
-				Debounce = true
-
-				local currentTab = SubSection.Name
-				local currentPage = KioskMenu.CurrentPages[currentTab] or 1
-
-				if currentPage > 1 then
-					KioskMenu.CurrentPages[currentTab] = currentPage - 1
-					KioskMenu:LoadMenuContents()
-				else
-					print("You are already on the first page!")
-				end
-
-				wait(0.3) 
-				Debounce = false
-			end)
-
-			for i = StartIndex, EndIndex do
-				local Item = Items[i]
-				if Item then
-
-					local NewContent = MenuContent:Clone()
-					NewContent.Name = Item.Name
-					NewContent:WaitForChild("ContentName").Text = Item.Name
-					NewContent:WaitForChild("ContentPrice").Text = Currency .. tostring(Item.Price)
-					NewContent.Parent = ContentsFrame
-
-					if Item.Image then
-						local ImageLabel = NewContent:WaitForChild("Contents") 
-						ImageLabel.Image = Item.Image
-						ImageLabel.ImageColor3 = ImageColour
-					end
-
-
-					NewContent:WaitForChild("Buttom").MouseEnter:Connect(function()
-						local button = NewContent:WaitForChild("Buttom")
-						local tween = TweenService:Create(button, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.5})
-						tween:Play()
-
-						NewContent.QuickAdd.Visible = true
-						self:AnimateFrame(NewContent.QuickAdd, {Size = UDim2.new(0.112, 0, 0.127, 0)}, 0.2)
-					end)
-
-					NewContent:WaitForChild("Buttom").MouseLeave:Connect(function()
-						local button = NewContent:WaitForChild("Buttom")
-						local tween = TweenService:Create(button, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1})
-						tween:Play()
-
-						self:AnimateFrame(NewContent.QuickAdd, {Size = UDim2.new(0, 0, 0, 0)}, 0.2)
-						wait(0.2)
-						NewContent.QuickAdd.Visible = false
-					end)
-
-				end
-			end
+			Header = self:CloneTabHeader(TabName)
 		end
 	end
 end
+
+-- Clones and sets up a new tab header with click functionality.
+function KioskMenu:CloneTabHeader(TabName)
+	local Header = KioskHeader:Clone()
+	Header.Name = TabName
+	Header.Text = TabName
+	Header.Parent = KioskScrollHeaders
+
+	local Gradient = KioskHeader.Parent:FindFirstChild("UIGradient")
+
+	Header:WaitForChild("Buttom").MouseButton1Click:Connect(function()
+		self:SelectTab(TabName, Gradient)
+	end)
+
+	return Header
+end
+
+-- Handles the logic when a tab is selected.
+function KioskMenu:SelectTab(TabName, Gradient)
+	if KioskMenu.CurrentlySelectedHeader == TabName then return end
+	self:ReloadTab(TabName, Gradient)
+end
+
+-- Reloads a tab's content when it is selected.
+function KioskMenu:ReloadTab(TabName, Gradient)
+	-- Reset UI and prepare for the new tab.
+	KioskMenu.CurrentlySelectedHeader = TabName
+	KioskMenu.CurrentPages[TabName] = 1
+	self:LoadMenuContents()
+
+	-- Make sure Header exists
+	local Header = KioskScrollHeaders:FindFirstChild(TabName)
+	if not Header then
+		warn("Header not found for Tab: " .. TabName)
+		return
+	end
+
+	-- Remove old gradients and apply a new one.
+	for _, i in KioskScrollHeaders:GetDescendants() do
+		if i:IsA("UIGradient") then
+			local FadeTween = TweenService:Create(i.Parent, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1})
+			FadeTween:Play()
+			i:Destroy()
+		end
+	end
+
+	if Gradient then
+		local Gradientc = Gradient:Clone()
+		Gradientc.Parent = Header
+		local TweenTras = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		local TransparencyTween = TweenService:Create(Header, TweenTras, {BackgroundTransparency = 0.91})
+		TransparencyTween:Play()
+	else
+		warn("No gradient provided!")
+	end
+
+	self:ScrollToTop()
+end
+
+
+-- Loads the content for each tab with pagination.
+function KioskMenu:LoadTabContents(TabOrder)
+	for _, TabName in ipairs(TabOrder) do
+		local Items = self.Tabs[TabName]
+		if Items and #Items > 0 then
+			self:DisplayTabContents(TabName, Items)
+		end
+	end
+end
+
+-- Displays the contents of a specific tab with pagination.
+function KioskMenu:DisplayTabContents(TabName, Items)
+	local Page = self.CurrentPages[TabName] or 1
+	local StartIndex = (Page - 1) * MaxContentsPerPage + 1
+	local EndIndex = math.min(StartIndex + MaxContentsPerPage - 1, #Items)
+
+	local SubSection = KioskScrollMenu:FindFirstChild(TabName)
+	if not SubSection then
+		SubSection = MenuSubSection:Clone()
+		SubSection.Name = TabName
+		SubSection:WaitForChild("TitleName").Text = TabName:match("^%s*(.-)%s*$")
+		SubSection.Parent = KioskScrollMenu
+	end
+
+	local ContentsFrame = SubSection:WaitForChild("SubSectionContents")
+	self:ClearUIListLayout(ContentsFrame)
+
+	-- Add buttons for pagination.
+	self:SetupPaginationButtons(SubSection)
+
+	-- Load the items for the current page.
+	self:DisplayItemsOnPage(ContentsFrame, Items, StartIndex, EndIndex)
+end
+
+-- Clears the UIListLayout inside a frame.
+function KioskMenu:ClearUIListLayout(ContentsFrame)
+	for _, child in ipairs(ContentsFrame:GetChildren()) do
+		if not child:IsA("UIListLayout") then
+			child:Destroy()
+		end
+	end
+end
+
+-- Sets up the pagination buttons.
+function KioskMenu:SetupPaginationButtons(SubSection)
+	local BackButton = SubSection:WaitForChild("Back")
+	local ForwardButton = SubSection:WaitForChild("Forward")
+
+	BackButton.MouseButton1Click:Connect(function()
+		self:ChangePage(-1, SubSection.Name)
+	end)
+
+	ForwardButton.MouseButton1Click:Connect(function()
+		self:ChangePage(1, SubSection.Name)
+	end)
+end
+
+-- Changes the current page and reloads the tab.
+function KioskMenu:ChangePage(Direction, TabName)
+	if Debounce then return end
+	Debounce = true
+
+	local CurrentPage = KioskMenu.CurrentPages[TabName] or 1
+	local TotalPages = math.ceil(#KioskMenu.Tabs[TabName] / MaxContentsPerPage)
+
+	if (Direction == -1 and CurrentPage > 1) or (Direction == 1 and CurrentPage < TotalPages) then
+		KioskMenu.CurrentPages[TabName] = CurrentPage + Direction
+		self:LoadMenuContents()
+	else
+		print(Direction == -1 and "You are already on the first page!" or "You are already on the last page!")
+	end
+
+	wait(0.3)
+	Debounce = false
+end
+
+-- Displays the items for the current page.
+function KioskMenu:DisplayItemsOnPage(ContentsFrame, Items, StartIndex, EndIndex)
+	for i = StartIndex, EndIndex do
+		local Item = Items[i]
+		if Item then
+			local NewContent = MenuContent:Clone()
+			NewContent.Name = Item.Name
+			NewContent:WaitForChild("ContentName").Text = Item.Name
+			NewContent:WaitForChild("ContentPrice").Text = Currency .. tostring(Item.Price)
+			NewContent.Parent = ContentsFrame
+			self:DisplayItemImage(NewContent, Item)
+			self:SetupItemButton(NewContent, Item)
+		end
+	end
+end
+
+-- Displays the image for a menu item.
+function KioskMenu:DisplayItemImage(NewContent, Item)
+	if Item.Image then
+		local ImageLabel = NewContent:WaitForChild("Contents")
+		ImageLabel.Image = Item.Image
+		ImageLabel.ImageColor3 = ImageColour
+	end
+end
+
+-- Sets up the button hover effects and quick add functionality.
+function KioskMenu:SetupItemButton(NewContent, Item)
+	local Button = NewContent:WaitForChild("Buttom")
+	Button.MouseEnter:Connect(function()
+		self:AnimateButton(Button, 0.5)
+		NewContent.QuickAdd.Visible = true
+		self:AnimateFrame(NewContent.QuickAdd, {Size = UDim2.new(0.112, 0, 0.127, 0)}, 0.2)
+	end)
+
+	Button.MouseLeave:Connect(function()
+		self:AnimateButton(Button, 1)
+		self:AnimateFrame(NewContent.QuickAdd, {Size = UDim2.new(0, 0, 0, 0)}, 0.2)
+		wait(0.2)
+		NewContent.QuickAdd.Visible = false
+	end)
+end
+
+-- Animates the button on hover.
+function KioskMenu:AnimateButton(Button, Transparency)
+	local tween = TweenService:Create(Button, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = Transparency})
+	tween:Play()
+end
+
 
 
 KioskMenu:LoadMenuContents()
