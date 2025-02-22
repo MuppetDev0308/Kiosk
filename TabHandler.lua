@@ -169,9 +169,9 @@ end
 
 -- Clears all items from the current menu.
 function KioskMenu:ClearMenuItems()
-	for _, child in ipairs(KioskScrollMenu:GetChildren()) do
-		if child:IsA("Frame") then
-			child:Destroy()
+	for _, Child in ipairs(KioskScrollMenu:GetChildren()) do
+		if Child:IsA("Frame") then
+			Child:Destroy()
 		end
 	end
 end
